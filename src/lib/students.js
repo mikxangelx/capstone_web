@@ -2,7 +2,7 @@
 // recommendations) from the deterministic mock attendance data. Swap the
 // data source for real API queries when a backend exists.
 
-import { getAttendanceForStudent, summarize } from "@/lib/mock-data";
+import { getAttendanceForStudent, summarize, toISODate } from "@/lib/mock-data";
 
 /**
  * Compute a student's attendance standing over a recent window.
@@ -63,6 +63,28 @@ export function prescriptiveFor({ rate, absences, lates }) {
   }
 
   return recs;
+}
+
+/**
+ * AI-prescribed conference slots: a few appropriate date + time options that
+ * guidance can choose from based on their availability. Picks upcoming
+ * weekdays at school-friendly times, skipping weekends. (Stand-in for the AI
+ * model's scheduling suggestion until it's connected.)
+ */
+export function suggestConferenceSlots(count = 4) {
+  const times = ["09:00", "10:30", "13:30", "15:00"];
+  const slots = [];
+  const today = new Date();
+  let offset = 1;
+  while (slots.length < count && offset < 30) {
+    const day = new Date(today);
+    day.setDate(today.getDate() + offset);
+    offset++;
+    const dow = day.getDay();
+    if (dow === 0 || dow === 6) continue; // no weekends
+    slots.push({ date: toISODate(day), time: times[slots.length % times.length] });
+  }
+  return slots;
 }
 
 /** Recommended one-line action derived from the standing. */

@@ -13,6 +13,7 @@ import {
   CircleCheck,
   Inbox,
   Mail,
+  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -59,6 +60,13 @@ export function StudentDetail({ student, user, mode, backHref }) {
   const measures = prescriptiveFor(standing);
   const action = recommendedAction(standing);
 
+  const initials = student.name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   const forward = (note) => {
     addReferral({
       studentId: student.id,
@@ -90,30 +98,46 @@ export function StudentDetail({ student, user, mode, backHref }) {
           Back
         </Link>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-heading text-2xl font-bold text-foreground">
-                {student.name}
-              </h1>
-              {student.status && <StatusBadge value={student.status} />}
-              {standing.needsAttention && <StatusBadge value="Needs attention" />}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {student.section || "No section"} · {student.email}
-            </p>
-          </div>
+        {/* Designed student header (centered, holds all student info) */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-5">
+            <span className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-rose-700 text-xl font-bold text-primary-foreground shadow-sm">
+              {initials}
+            </span>
 
-          {mode === "teacher" &&
-            (referral ? (
-              <ReferralStatus referral={referral} />
-            ) : (
-              <Button onClick={() => setConfOpen(true)}>
-                <Forward className="size-4" />
-                Forward to Guidance
-              </Button>
-            ))}
-        </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-heading text-2xl font-bold text-foreground">
+                  {student.name}
+                </h1>
+                {student.status && <StatusBadge value={student.status} />}
+                {standing.needsAttention && (
+                  <StatusBadge value="Needs attention" />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <GraduationCap className="size-4 text-primary/70" />
+                  {student.section || "No section"}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="size-4 text-primary/70" />
+                  {student.email}
+                </span>
+              </div>
+            </div>
+
+            {mode === "teacher" &&
+              (referral ? (
+                <ReferralStatus referral={referral} />
+              ) : (
+                <Button onClick={() => setConfOpen(true)}>
+                  <Forward className="size-4" />
+                  Forward to Guidance
+                </Button>
+              ))}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -188,7 +212,10 @@ export function StudentDetail({ student, user, mode, backHref }) {
               />
             </CardContent>
           </Card>
+        </div>
 
+        {/* Side column */}
+        <div className="space-y-6">
           {/* AI prescriptive recommendations — teacher only */}
           {mode === "teacher" && (
             <Card className="bg-gradient-to-br from-primary/5 to-rose-50 ring-primary/15">
@@ -229,27 +256,6 @@ export function StudentDetail({ student, user, mode, backHref }) {
               </CardContent>
             </Card>
           )}
-        </div>
-
-        {/* Side column */}
-        <div className="space-y-6">
-          {/* Profile */}
-          <Card>
-            <CardHeader>
-              <h2 className="font-heading text-base font-semibold text-foreground">
-                Student
-              </h2>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <Row label="Name" value={student.name} />
-              <Row label="Section" value={student.section || "—"} />
-              <Row label="Email" value={student.email} />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Status</span>
-                <StatusBadge value={student.status} />
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Recommended action */}
           <Card>
@@ -380,7 +386,8 @@ function ForwardForm({ student, onSubmit, onCancel }) {
     >
       <p className="text-sm text-muted-foreground">
         Forward <span className="font-medium text-foreground">{student}</span> to the
-        guidance office. Add a note so guidance knows why you forwarded this student.
+        guidance office. Add a note so guidance knows why. The AI will suggest
+        appropriate conference times, and guidance picks the one that fits their schedule.
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="fwd-note">Note to guidance</Label>
@@ -402,14 +409,5 @@ function ForwardForm({ student, onSubmit, onCancel }) {
         </Button>
       </div>
     </form>
-  );
-}
-
-function Row({ label, value }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium text-foreground">{value}</span>
-    </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import { useState } from "react";
+import { FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, DataTable } from "@/components/dashboard/dashboard-ui";
 import { Calendar } from "@/components/dashboard/calendar";
@@ -12,7 +12,6 @@ import {
   toISODate,
   getAttendanceForDate,
   getAttendanceForMonth,
-  getAttendanceForYear,
   summarize,
 } from "@/lib/mock-data";
 import { exportToExcel, exportToPdf } from "@/lib/export";
@@ -28,7 +27,11 @@ const EXPORT_COLUMNS = [
 const PERIODS = [
   { key: "daily", label: "Daily" },
   { key: "monthly", label: "Monthly" },
-  { key: "yearly", label: "Yearly" },
+];
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
 const SUMMARY_CHIPS = [
@@ -42,87 +45,137 @@ export default function AttendanceRecordPage() {
   const [selected, setSelected] = useState(() => toISODate(new Date()));
   const [period, setPeriod] = useState("daily");
 
-  const dayRecords = useMemo(() => getAttendanceForDate(selected), [selected]);
-  const summary = useMemo(() => summarize(dayRecords), [dayRecords]);
+  const isMonthly = period === "monthly";
 
-  const selectedDateLabel = new Date(`${selected}T00:00:00`).toLocaleDateString(
-    undefined,
-    { weekday: "long", month: "long", day: "numeric", year: "numeric" }
-  );
+  const d = new Date(`${selected}T00:00:00`);
+  const year = d.getFullYear();
+  const monthIndex = d.getMonth();
 
-  // Build the rows + filename + title for the chosen export period.
-  const buildExport = () => {
-    const d = new Date(`${selected}T00:00:00`);
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const monthName = d.toLocaleDateString(undefined, { month: "long" });
+  const records = isMonthly
+    ? getAttendanceForMonth(year, monthIndex)
+    : getAttendanceForDate(selected);
+  const summary = summarize(records);
 
-    if (period === "monthly") {
-      return {
-        rows: getAttendanceForMonth(year, month),
-        name: `attendance-${year}-${String(month + 1).padStart(2, "0")}`,
-        title: `Attendance Report — ${monthName} ${year}`,
-      };
-    }
-    if (period === "yearly") {
-      return {
-        rows: getAttendanceForYear(year),
-        name: `attendance-${year}`,
-        title: `Attendance Report — ${year}`,
-      };
-    }
-    return {
-      rows: dayRecords,
-      name: `attendance-${selected}`,
-      title: `Attendance Report — ${selectedDateLabel}`,
-    };
-  };
+  const dayLabel = d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const monthLabel = d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const recordsLabel = isMonthly ? monthLabel : dayLabel;
+
+  // Move to a different month/year (keeps the day at the 1st).
+  const goToMonth = (m, y = year) => setSelected(toISODate(new Date(y, m, 1)));
 
   const handleExport = (kind) => {
-    const { rows, name, title } = buildExport();
-    if (rows.length === 0) {
+    if (records.length === 0) {
       toast.error("No attendance records for the selected period.");
       return;
     }
+    const name = isMonthly
+      ? `attendance-${year}-${String(monthIndex + 1).padStart(2, "0")}`
+      : `attendance-${selected}`;
+    const title = `Attendance Report — ${recordsLabel}`;
+
     if (kind === "excel") {
-      exportToExcel(name, EXPORT_COLUMNS, rows);
-      toast.success(`Excel exported (${rows.length} records).`);
+      exportToExcel(name, EXPORT_COLUMNS, records);
+      toast.success(`Excel exported (${records.length} records).`);
     } else {
-      exportToPdf(title, EXPORT_COLUMNS, rows);
+      exportToPdf(title, EXPORT_COLUMNS, records);
       toast.success("Opening printable PDF…");
     }
   };
+
+  const tableColumns = isMonthly
+    ? [
+        { key: "date", label: "Date" },
+        { key: "student", label: "Student" },
+        { key: "timeIn", label: "Time In" },
+        { key: "status", label: "Status", badge: true },
+      ]
+    : [
+        { key: "student", label: "Student" },
+        { key: "section", label: "Section" },
+        { key: "timeIn", label: "Time In" },
+        { key: "status", label: "Status", badge: true },
+      ];
 
   return (
     <>
       <PageHeader
         title="Attendance Record"
-        subtitle="Pick a date to view attendance, and export by day, month, or year."
+        subtitle="View attendance by day or month, and export to Excel or PDF."
       />
 
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-        {/* Calendar */}
+        {/* Picker: calendar (daily) or month grid (monthly) */}
         <Card className="h-fit">
           <CardHeader>
             <h2 className="font-heading text-base font-semibold text-foreground">
-              Select date
+              {isMonthly ? "Select month" : "Select date"}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Tap any day to view its attendance.
+              {isMonthly
+                ? "Pick a month to view and export."
+                : "Tap any day to view its attendance."}
             </p>
           </CardHeader>
           <CardContent>
-            <Calendar selected={selected} onSelect={setSelected} />
+            {isMonthly ? (
+              <div className="space-y-3">
+                {/* Year navigation */}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => goToMonth(monthIndex, year - 1)}
+                    aria-label="Previous year"
+                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-5" />
+                  </button>
+                  <span className="text-sm font-semibold text-foreground">{year}</span>
+                  <button
+                    type="button"
+                    onClick={() => goToMonth(monthIndex, year + 1)}
+                    aria-label="Next year"
+                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-foreground"
+                  >
+                    <ChevronRight className="size-5" />
+                  </button>
+                </div>
+                {/* Month grid */}
+                <div className="grid grid-cols-3 gap-2">
+                  {MONTHS.map((m, i) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => goToMonth(i)}
+                      className={cn(
+                        "rounded-lg px-2 py-2.5 text-sm font-medium transition-colors",
+                        i === monthIndex
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-foreground"
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Calendar selected={selected} onSelect={setSelected} />
+            )}
           </CardContent>
         </Card>
 
-        {/* Day view + export */}
+        {/* Records + export */}
         <div className="space-y-5">
           {/* Export bar */}
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-foreground">Export:</span>
+                <span className="text-sm font-medium text-foreground">View:</span>
                 <div className="inline-flex rounded-full bg-slate-100 p-1">
                   {PERIODS.map((p) => (
                     <button
@@ -154,13 +207,13 @@ export default function AttendanceRecordPage() {
             </CardContent>
           </Card>
 
-          {/* Selected day summary + table */}
+          {/* Summary + table */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-heading text-base font-semibold text-foreground">
-                {selectedDateLabel}
+                {recordsLabel}
               </h2>
-              {dayRecords.length > 0 && (
+              {records.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {SUMMARY_CHIPS.map((c) => (
                     <span
@@ -178,14 +231,13 @@ export default function AttendanceRecordPage() {
             </div>
 
             <DataTable
-              columns={[
-                { key: "student", label: "Student" },
-                { key: "section", label: "Section" },
-                { key: "timeIn", label: "Time In" },
-                { key: "status", label: "Status", badge: true },
-              ]}
-              rows={dayRecords}
-              empty="No classes on this day (weekend) or no records found."
+              columns={tableColumns}
+              rows={records}
+              empty={
+                isMonthly
+                  ? "No records for this month."
+                  : "No classes on this day (weekend) or no records found."
+              }
             />
           </div>
         </div>

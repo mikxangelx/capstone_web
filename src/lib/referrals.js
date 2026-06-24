@@ -1,5 +1,8 @@
-// Conference referrals: a teacher forwards a case to guidance (no date),
-// and guidance plots the actual schedule. Backed by localStorage (mock).
+// Conference referrals: a teacher forwards a case to guidance. The AI
+// prescribes appropriate date/time slots at forward time, and guidance picks
+// the one that fits their availability. Backed by localStorage (mock).
+
+import { suggestConferenceSlots } from "@/lib/students";
 
 const STORAGE_KEY = "hhca:referrals";
 const CHANGE_EVENT = "hhca:referrals-changed";
@@ -79,6 +82,8 @@ export function addReferral({
     status: "Pending",
     date: null,
     time: null,
+    // AI-prescribed slots for guidance to choose from.
+    suggestedSlots: suggestConferenceSlots(),
     createdAt: Date.now(),
   };
   persist([referral, ...base()]);

@@ -5,11 +5,8 @@ import {
   BookOpen,
   Music,
   ClipboardList,
-  CalendarClock,
   UserCheck,
-  QrCode,
   FileSpreadsheet,
-  ChartColumn,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
@@ -31,27 +28,14 @@ const NAV = [
           { label: "Music (Gumamela)", href: "/teacher/subjects/music", icon: Music },
         ],
       },
-    ],
-  },
-  {
-    heading: "Attendance History",
-    items: [
       { label: "Attendance Records", href: "/teacher/attendance", icon: ClipboardList },
-      { label: "Attendance Sessions", href: "/teacher/sessions", icon: CalendarClock },
     ],
   },
   {
-    heading: "Student Management",
+    heading: "Students & Reports",
     items: [
       { label: "Learner Status", href: "/teacher/learners", icon: UserCheck },
-      { label: "Student QR Codes", href: "/teacher/qr-codes", icon: QrCode },
-    ],
-  },
-  {
-    heading: "Reports",
-    items: [
-      { label: "SF2 Report Form", href: "/teacher/reports", icon: FileSpreadsheet },
-      { label: "Summary Attendance", href: "/teacher/summary", icon: ChartColumn, dot: "blue" },
+      { label: "Reports", href: "/teacher/reports", icon: FileSpreadsheet },
     ],
   },
 ];
