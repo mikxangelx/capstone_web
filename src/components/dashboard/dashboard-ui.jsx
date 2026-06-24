@@ -1,0 +1,146 @@
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
+/** Page title + subtitle, with optional actions on the right. */
+export function PageHeader({ title, subtitle, actions }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="space-y-1">
+        <h1 className="font-heading text-2xl font-bold text-foreground">
+          {title}
+        </h1>
+        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** Compact stat card for dashboard overviews. */
+export function StatCard({ icon: Icon, label, value, tone = "primary" }) {
+  const toneClass =
+    {
+      primary: "bg-primary/10 text-primary",
+      success: "bg-emerald-100 text-emerald-700",
+      warning: "bg-amber-100 text-amber-700",
+      danger: "bg-red-100 text-red-700",
+      info: "bg-sky-100 text-sky-700",
+    }[tone] ?? "bg-primary/10 text-primary";
+
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-4">
+        {Icon && (
+          <span
+            className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${toneClass}`}
+          >
+            <Icon className="size-5" />
+          </span>
+        )}
+        <div className="leading-tight">
+          <p className="text-2xl font-bold text-foreground">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Maps a status/priority string to a colored Badge. */
+const STATUS_TONES = {
+  Present: "success",
+  Confirmed: "success",
+  Resolved: "success",
+  Completed: "success",
+  Active: "success",
+  Late: "warning",
+  "Needs attention": "warning",
+  "In Progress": "warning",
+  Scheduled: "info",
+  Pending: "warning",
+  Declined: "danger",
+  Open: "info",
+  Medium: "warning",
+  Low: "neutral",
+  Inactive: "neutral",
+  Disabled: "danger",
+  Excused: "neutral",
+  Absent: "danger",
+  High: "danger",
+};
+
+export function StatusBadge({ value }) {
+  return <Badge tone={STATUS_TONES[value] ?? "neutral"}>{value}</Badge>;
+}
+
+/**
+ * Simple responsive table.
+ * `columns`: [{ key, label, badge?: bool, className? }]
+ * `rows`: array of objects keyed by column.key
+ */
+export function DataTable({ columns, rows, empty = "No records found." }) {
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-black/5">
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                className="px-4 py-3 font-medium text-muted-foreground"
+              >
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td
+                colSpan={columns.length}
+                className="px-4 py-10 text-center text-muted-foreground"
+              >
+                {empty}
+              </td>
+            </tr>
+          ) : (
+            rows.map((row, i) => (
+              <tr
+                key={row.id ?? i}
+                className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+              >
+                {columns.map((c) => (
+                  <td key={c.key} className={`px-4 py-3 ${c.className ?? ""}`}>
+                    {c.render ? (
+                      c.render(row)
+                    ) : c.badge ? (
+                      <StatusBadge value={row[c.key]} />
+                    ) : (
+                      <span className="text-foreground/90">{row[c.key]}</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Friendly placeholder for sections that aren't wired up yet. */
+export function Placeholder({ icon: Icon, title, description }) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
+        {Icon && <Icon className="size-9 text-muted-foreground/40" />}
+        <p className="font-medium text-foreground">{title}</p>
+        {description && (
+          <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
