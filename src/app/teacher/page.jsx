@@ -29,7 +29,7 @@ export default function TeacherDashboardPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={UserCheck} label="Present" value={ATTENDANCE_SUMMARY.present} tone="success" />
         <StatCard icon={Clock} label="Late" value={ATTENDANCE_SUMMARY.late} tone="warning" />
         <StatCard icon={UserX} label="Absent" value={ATTENDANCE_SUMMARY.absent} tone="danger" />

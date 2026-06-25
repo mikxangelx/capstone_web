@@ -92,7 +92,13 @@
   }
   html {
     @apply font-sans;
-    /* Nudge the whole rem-based UI up ~6% so text reads a little larger. */
-    font-size: 106.25%;
+    /* Keep 16px on phones for breathing room; nudge up ~6% on larger screens
+       so text reads a little larger without crowding the mobile layout. */
+    font-size: 100%;
+  }
+  @media (min-width: 640px) {
+    html {
+      font-size: 106.25%;
+    }
   }
 }

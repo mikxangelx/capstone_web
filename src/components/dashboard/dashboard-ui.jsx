@@ -73,60 +73,114 @@ export function StatusBadge({ value }) {
   return <Badge tone={STATUS_TONES[value] ?? "neutral"}>{value}</Badge>;
 }
 
+/** Render one cell's content, shared by the table and the mobile cards. */
+function renderCell(col, row) {
+  if (col.render) return col.render(row);
+  if (col.badge) return <StatusBadge value={row[col.key]} />;
+  return <span className="text-foreground/90">{row[col.key]}</span>;
+}
+
 /**
- * Simple responsive table.
- * `columns`: [{ key, label, badge?: bool, className? }]
+ * Responsive table: a real table on `md+` screens, and a stacked card list on
+ * phones (each row becomes a card — first column is the title, the rest are
+ * label/value rows, and unlabeled columns like action buttons go full-width).
+ * `columns`: [{ key, label, badge?: bool, render?, className? }]
  * `rows`: array of objects keyed by column.key
  */
 export function DataTable({ columns, rows, empty = "No records found." }) {
   return (
-    <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-black/5">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead>
-          <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                className="px-4 py-3 font-medium text-muted-foreground"
-              >
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td
-                colSpan={columns.length}
-                className="px-4 py-10 text-center text-muted-foreground"
-              >
-                {empty}
-              </td>
+    <>
+      {/* Desktop / tablet table */}
+      <div className="hidden overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-black/5 md:block">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
+              {columns.map((c) => (
+                <th
+                  key={c.key}
+                  className="px-4 py-3 font-medium text-muted-foreground"
+                >
+                  {c.label}
+                </th>
+              ))}
             </tr>
-          ) : (
-            rows.map((row, i) => (
-              <tr
-                key={row.id ?? i}
-                className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className={`px-4 py-3 ${c.className ?? ""}`}>
-                    {c.render ? (
-                      c.render(row)
-                    ) : c.badge ? (
-                      <StatusBadge value={row[c.key]} />
-                    ) : (
-                      <span className="text-foreground/90">{row[c.key]}</span>
-                    )}
-                  </td>
-                ))}
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  {empty}
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            ) : (
+              rows.map((row, i) => (
+                <tr
+                  key={row.id ?? i}
+                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                >
+                  {columns.map((c) => (
+                    <td key={c.key} className={`px-4 py-3 ${c.className ?? ""}`}>
+                      {renderCell(c, row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-3 md:hidden">
+        {rows.length === 0 ? (
+          <div className="rounded-2xl bg-card p-6 text-center text-sm text-muted-foreground shadow-sm ring-1 ring-black/5">
+            {empty}
+          </div>
+        ) : (
+          rows.map((row, i) => (
+            <div
+              key={row.id ?? i}
+              className="space-y-2 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-black/5"
+            >
+              {columns.map((c, ci) => {
+                const content = renderCell(c, row);
+                // First column = card title.
+                if (ci === 0) {
+                  return (
+                    <div key={c.key} className="font-semibold text-foreground">
+                      {content}
+                    </div>
+                  );
+                }
+                // Unlabeled columns (action buttons, etc.) — full width.
+                if (!c.label) {
+                  return (
+                    <div key={c.key} className="pt-1">
+                      {content}
+                    </div>
+                  );
+                }
+                // Everything else — label / value row.
+                return (
+                  <div
+                    key={c.key}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                      {c.label}
+                    </span>
+                    <span className="min-w-0 text-right">{content}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    </>
   );
 }
 

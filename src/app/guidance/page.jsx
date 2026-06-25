@@ -121,7 +121,7 @@ export default function GuidanceDashboardPage() {
         subtitle="Referrals from teachers and the conference schedule at a glance."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Inbox} label="Pending referrals" value={pending.length} tone="warning" />
         <StatCard icon={CalendarClock} label="Upcoming conferences" value={upcomingCount} tone="info" />
         <StatCard icon={FolderOpen} label="Open cases" value={openCases} tone="primary" />
