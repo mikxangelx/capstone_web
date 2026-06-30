@@ -2,11 +2,10 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Search, Eye } from "lucide-react";
-import { PageHeader, DataTable, StatusBadge } from "@/components/dashboard/dashboard-ui";
+import { Search } from "lucide-react";
+import { PageHeader, StatusBadge } from "@/components/dashboard/dashboard-ui";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { buttonVariants } from "@/components/ui/button";
 import { getUsers, getServerUsers, subscribe, isStudent } from "@/lib/users";
 import { getStudentStanding } from "@/lib/students";
 
@@ -88,33 +87,36 @@ export default function LearnerStatusPage() {
         </Select>
       </div>
 
-      <DataTable
-        columns={[
-          { key: "name", label: "Name" },
-          { key: "section", label: "Section" },
-          { key: "rate", label: "Attendance" },
-          {
-            key: "standing",
-            label: "Standing",
-            render: (row) => <StatusBadge value={row.standing} />,
-          },
-          {
-            key: "open",
-            label: "",
-            render: (row) => (
-              <Link
-                href={`/teacher/learners/${row.id}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <Eye className="size-4" />
-                Open
-              </Link>
-            ),
-          },
-        ]}
-        rows={rows}
-        empty="No learners match your filters."
-      />
+      {rows.length === 0 ? (
+        <div className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-sm ring-1 ring-black/5">
+          No learners match your filters.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-black/5">
+          {rows.map((row, i) => (
+            <Link
+              key={row.id ?? i}
+              href={`/teacher/learners/${row.id}`}
+              className={`flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 ${
+                i < rows.length - 1 ? "border-b border-slate-100" : ""
+              }`}
+            >
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  row.standing === "Needs attention" ? "bg-amber-400" : "bg-emerald-400"
+                }`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="font-medium text-foreground">{row.name}</span>
+                <span className="mx-1.5 text-muted-foreground">·</span>
+                <span className="text-muted-foreground">{row.section}</span>
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">{row.rate}</span>
+              <StatusBadge value={row.standing} />
+            </Link>
+          ))}
+        </div>
+      )}
     </>
   );
 }

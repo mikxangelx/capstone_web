@@ -20,6 +20,13 @@ const SEED = Object.freeze([
   { id: "u-101", name: "Andrea Santos", email: "a.santos@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
   { id: "u-102", name: "Miguel Reyes", email: "m.reyes@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
   { id: "u-103", name: "Sofia Dela Cruz", email: "s.delacruz@hhca.edu.ph", role: "Student", section: "Grade 9 - St. John", status: "Active" },
+  { id: "u-104", name: "Gabriel Mendoza", email: "g.mendoza@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-105", name: "Isabella Garcia", email: "i.garcia@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-106", name: "Lucas Aquino", email: "l.aquino@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-107", name: "Chloe Ramos", email: "c.ramos@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-108", name: "Nathan Villanueva", email: "n.villanueva@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-109", name: "Ella Navarro", email: "e.navarro@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
+  { id: "u-110", name: "Daniel Cruz", email: "d.cruz@hhca.edu.ph", role: "Student", section: "Grade 10 - St. Peter", status: "Active" },
 ]);
 
 let cachedRaw = "__init__";

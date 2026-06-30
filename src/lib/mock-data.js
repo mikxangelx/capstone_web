@@ -225,6 +225,20 @@ function statusFor(name, dateStr) {
   return { status: "Excused", timeIn: "—" };
 }
 
+/** Attendance rows for a single student for a specific month (most recent first). */
+export function getAttendanceForStudentInMonth(name, year, month) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const out = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = toISODate(new Date(year, month, d));
+    const dow = new Date(`${dateStr}T00:00:00`).getDay();
+    if (dow === 0 || dow === 6) continue;
+    const { status, timeIn } = statusFor(name, dateStr);
+    out.push({ id: `${name}-${dateStr}`, date: dateStr, student: name, timeIn, status });
+  }
+  return out.reverse();
+}
+
 /**
  * Attendance rows for a single student over the last `days` calendar days
  * (most recent first). Reuses the same deterministic logic as the roster, so

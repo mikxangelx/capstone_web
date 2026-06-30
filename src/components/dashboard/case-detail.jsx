@@ -39,7 +39,7 @@ function fmtTime(t) {
   return `${hh}:${m} ${Number(h) < 12 ? "AM" : "PM"}`;
 }
 
-export function CaseDetail({ caseData, user, backHref }) {
+export function CaseDetail({ caseData, user, backHref, backLabel = "Back to Cases" }) {
   const [status, setStatus] = useState(caseData.status);
   const [notes, setNotes] = useState([]);
   const [noteDraft, setNoteDraft] = useState("");
@@ -97,7 +97,7 @@ export function CaseDetail({ caseData, user, backHref }) {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           <ArrowLeft className="size-4" />
-          Back to Cases
+          {backLabel}
         </Link>
 
         <div className="flex flex-wrap items-start justify-between gap-4">

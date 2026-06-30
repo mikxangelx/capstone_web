@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -22,11 +22,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge, DataTable } from "@/components/dashboard/dashboard-ui";
+import { Select } from "@/components/ui/select";
 import {
   getStudentStanding,
   prescriptiveFor,
   recommendedAction,
 } from "@/lib/students";
+import { getAttendanceForStudentInMonth, summarize } from "@/lib/mock-data";
 import {
   getReferrals,
   getServerReferrals,
@@ -49,6 +51,7 @@ function fmtTime(t) {
  */
 export function StudentDetail({ student, user, mode, backHref }) {
   const [confOpen, setConfOpen] = useState(false);
+  const [period, setPeriod] = useState("recent");
 
   const referrals = useSyncExternalStore(subscribe, getReferrals, getServerReferrals);
   const referral =
@@ -56,9 +59,44 @@ export function StudentDetail({ student, user, mode, backHref }) {
       (r) => r.studentId === student.id || r.student === student.name
     ) ?? null;
 
+  // Always use recent standing for AI recommendations / badge / recommended action.
   const standing = getStudentStanding(student.name);
   const measures = prescriptiveFor(standing);
   const action = recommendedAction(standing);
+
+  // Last 6 calendar months as selectable options.
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    const today = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      opts.push({
+        value: `${d.getFullYear()}-${d.getMonth()}`,
+        label: d.toLocaleString("default", { month: "long", year: "numeric" }),
+        year: d.getFullYear(),
+        month: d.getMonth(),
+      });
+    }
+    return opts;
+  }, []);
+
+  // Attendance data for the selected period.
+  const periodRecord = useMemo(() => {
+    if (period === "recent") {
+      return { history: standing.history, counts: standing.counts, rate: standing.rate, total: standing.total };
+    }
+    const [y, m] = period.split("-").map(Number);
+    const history = getAttendanceForStudentInMonth(student.name, y, m);
+    const counts = summarize(history);
+    const total = history.length || 1;
+    const rate = Math.round((counts.present / total) * 100);
+    return { history, counts, rate, total };
+  }, [period, student.name, standing]);
+
+  const periodLabel =
+    period === "recent"
+      ? `Last ${periodRecord.total} school days`
+      : monthOptions.find((o) => o.value === period)?.label ?? "";
 
   const initials = student.name
     .split(" ")
@@ -81,9 +119,9 @@ export function StudentDetail({ student, user, mode, backHref }) {
   };
 
   const stats = [
-    { icon: UserCheck, label: "Attendance", value: `${standing.rate}%`, tone: "bg-emerald-100 text-emerald-700" },
-    { icon: UserX, label: "Absences", value: standing.absences, tone: "bg-red-100 text-red-700" },
-    { icon: Clock, label: "Late arrivals", value: standing.lates, tone: "bg-amber-100 text-amber-700" },
+    { icon: UserCheck, label: "Attendance", value: `${periodRecord.rate}%`, tone: "bg-emerald-100 text-emerald-700" },
+    { icon: UserX, label: "Absences", value: periodRecord.counts.absent, tone: "bg-red-100 text-red-700" },
+    { icon: Clock, label: "Late arrivals", value: periodRecord.counts.late, tone: "bg-amber-100 text-amber-700" },
   ];
 
   return (
@@ -218,12 +256,26 @@ export function StudentDetail({ student, user, mode, backHref }) {
           {/* Attendance record */}
           <Card>
             <CardHeader>
-              <h2 className="font-heading text-base font-semibold text-foreground">
-                Attendance record
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Last {standing.total} school days.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-base font-semibold text-foreground">
+                    Attendance record
+                  </h2>
+                  <p className="text-sm text-muted-foreground">{periodLabel}</p>
+                </div>
+                <Select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  className="h-9 w-auto min-w-40 text-sm"
+                >
+                  <option value="recent">Last 30 days</option>
+                  {monthOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
@@ -248,7 +300,7 @@ export function StudentDetail({ student, user, mode, backHref }) {
                   { key: "timeIn", label: "Time In" },
                   { key: "status", label: "Status", badge: true },
                 ]}
-                rows={standing.history.slice(0, 12)}
+                rows={periodRecord.history}
                 empty="No attendance records."
               />
             </CardContent>
