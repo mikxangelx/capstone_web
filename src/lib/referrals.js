@@ -103,6 +103,17 @@ export function declineReferral(id) {
   persist(base().map((r) => (r.id === id ? { ...r, status: "Declined" } : r)));
 }
 
+/** Guidance records the outcome after a conference has taken place. */
+export function addOutcomeNote(id, note) {
+  persist(
+    base().map((r) =>
+      r.id === id
+        ? { ...r, outcomeNote: note.trim(), outcomeAt: Date.now() }
+        : r
+    )
+  );
+}
+
 export function subscribe(listener) {
   if (typeof window === "undefined") return () => {};
   const onStorage = (e) => {

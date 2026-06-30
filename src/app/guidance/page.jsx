@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import {
   CalendarClock,
-  User,
-  Users,
   Inbox,
   CalendarPlus,
   Clock,
@@ -12,18 +11,15 @@ import {
   FolderOpen,
   CheckCircle2,
   X,
+  User,
+  Users,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
-import {
-  PageHeader,
-  StatCard,
-  DataTable,
-  StatusBadge,
-} from "@/components/dashboard/dashboard-ui";
-import { Calendar } from "@/components/dashboard/calendar";
+import { PageHeader, StatCard, StatusBadge } from "@/components/dashboard/dashboard-ui";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
@@ -37,9 +33,19 @@ import {
   scheduleReferral,
   declineReferral,
 } from "@/lib/referrals";
+import { getUsers, getServerUsers, subscribe as subUsers } from "@/lib/users";
 
 function useReferrals() {
   return useSyncExternalStore(subscribe, getReferrals, getServerReferrals);
+}
+
+function useStudentLink(users) {
+  return (name, studentId) => {
+    const match =
+      (studentId && users.find((u) => u.id === studentId)) ??
+      users.find((u) => u.name === name);
+    return match ? `/guidance/students/${match.id}` : null;
+  };
 }
 
 function fmtTime(t) {
@@ -51,25 +57,25 @@ function fmtTime(t) {
 
 function fmtDate(d) {
   return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
+    weekday: "short", month: "short", day: "numeric",
   });
 }
 
 export default function GuidanceDashboardPage() {
   const { user } = useAuth();
   const referrals = useReferrals();
-  const [scheduling, setScheduling] = useState(null); // referral being scheduled
-  const [selected, setSelected] = useState(null);
+  const users = useSyncExternalStore(subUsers, getUsers, getServerUsers);
+  const studentLink = useStudentLink(users);
+  const [scheduling, setScheduling] = useState(null);
+
+  const today = toISODate(new Date());
 
   const pending = useMemo(
     () => referrals.filter((r) => r.status === "Pending"),
     [referrals]
   );
 
-  // Combine the static conferences with referrals guidance has scheduled.
-  const conferences = useMemo(() => {
+  const allConferences = useMemo(() => {
     const fromReferrals = referrals
       .filter((r) => r.status === "Scheduled")
       .map((r) => ({
@@ -83,33 +89,10 @@ export default function GuidanceDashboardPage() {
     return [...fromReferrals, ...CONFERENCES];
   }, [referrals]);
 
-  const conferenceDates = useMemo(
-    () => [...new Set(conferences.map((c) => c.date))],
-    [conferences]
-  );
-
-  const today = toISODate(new Date());
-  const upcomingCount = conferences.filter((c) => c.date >= today).length;
+  const todayConferences = allConferences.filter((c) => c.date === today);
+  const upcomingCount = allConferences.filter((c) => c.date >= today).length;
   const openCases = CASES.filter((c) => c.status !== "Resolved").length;
   const resolvedCases = CASES.filter((c) => c.status === "Resolved").length;
-
-  // Default the calendar to the nearest upcoming conference.
-  const effectiveSelected = useMemo(() => {
-    if (selected) return selected;
-    const sorted = [...conferenceDates].sort();
-    return sorted.find((d) => d >= today) ?? sorted[sorted.length - 1] ?? today;
-  }, [selected, conferenceDates, today]);
-
-  const dayConferences = conferences.filter((c) => c.date === effectiveSelected);
-
-  const selectedDateLabel = new Date(
-    `${effectiveSelected}T00:00:00`
-  ).toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 
   if (!user) return null;
   const firstName = user.name.split(" ")[0];
@@ -118,9 +101,16 @@ export default function GuidanceDashboardPage() {
     <>
       <PageHeader
         title={`Welcome, ${firstName}`}
-        subtitle="Referrals from teachers and the conference schedule at a glance."
+        subtitle="Your pending actions and today's schedule."
+        actions={
+          <Link href="/guidance/conferences" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <CalendarClock className="size-4" />
+            All conferences
+          </Link>
+        }
       />
 
+      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Inbox} label="Pending referrals" value={pending.length} tone="warning" />
         <StatCard icon={CalendarClock} label="Upcoming conferences" value={upcomingCount} tone="info" />
@@ -128,124 +118,139 @@ export default function GuidanceDashboardPage() {
         <StatCard icon={CheckCircle2} label="Resolved" value={resolvedCases} tone="success" />
       </div>
 
-      {/* Pending referrals from teachers */}
-      {pending.length > 0 && (
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Pending referrals */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Inbox className="size-4 text-primary" />
             <h2 className="font-heading text-base font-semibold text-foreground">
-              Referrals to schedule
+              Referrals to act on
             </h2>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              {pending.length}
-            </span>
+            {pending.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {pending.length}
+              </span>
+            )}
           </div>
-          <ul className="space-y-3">
-            {pending.map((r) => (
-              <li key={r.id}>
-                <Card>
-                  <CardContent className="flex flex-wrap items-start justify-between gap-4 py-4">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">
-                        {r.student}
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {r.section}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        From {r.fromName}
-                        {r.caseId ? ` · Case ${r.caseId}` : ""}
-                      </p>
-                      {r.reason && (
-                        <p className="max-w-prose pt-1 text-sm text-foreground/90">
-                          “{r.reason}”
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => setScheduling(r)}>
-                        <CalendarPlus className="size-4" />
-                        Schedule
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          declineReferral(r.id);
-                          toast.success("Referral declined.");
-                        }}
-                      >
-                        <X className="size-4" />
-                        Decline
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-        {/* Calendar */}
-        <Card className="h-fit">
-          <CardHeader>
-            <h2 className="font-heading text-base font-semibold text-foreground">
-              Conference calendar
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Dots mark days with conferences.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <Calendar
-              selected={effectiveSelected}
-              onSelect={setSelected}
-              marked={conferenceDates}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Selected day */}
-        <div className="space-y-3">
-          <h2 className="font-heading text-base font-semibold text-foreground">
-            {selectedDateLabel}
-          </h2>
-
-          {dayConferences.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-                <CalendarClock className="size-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">
-                  No conferences scheduled for this date.
-                </p>
+          {pending.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-1.5 py-10 text-center">
+                <Inbox className="size-7 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No pending referrals.</p>
               </CardContent>
             </Card>
           ) : (
             <ul className="space-y-3">
-              {dayConferences.map((c) => (
+              {pending.map((r) => (
+                <li key={r.id}>
+                  <Card>
+                    <CardContent className="space-y-3 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-semibold">
+                            {studentLink(r.student, r.studentId) ? (
+                              <Link
+                                href={studentLink(r.student, r.studentId)}
+                                className="text-primary hover:underline underline-offset-2"
+                              >
+                                {r.student}
+                              </Link>
+                            ) : (
+                              <span className="text-foreground">{r.student}</span>
+                            )}
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                              {r.section}
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            From {r.fromName}{r.caseId ? ` · Case ${r.caseId}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => setScheduling(r)}>
+                            <CalendarPlus className="size-4" />
+                            Schedule
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { declineReferral(r.id); toast.success("Referral declined."); }}
+                          >
+                            <X className="size-4" />
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                      {r.reason && (
+                        <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-foreground/90 ring-1 ring-black/5">
+                          "{r.reason}"
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Today's conferences */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="size-4 text-primary" />
+              <h2 className="font-heading text-base font-semibold text-foreground">
+                Today's schedule
+              </h2>
+              {todayConferences.length > 0 && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  {todayConferences.length}
+                </span>
+              )}
+            </div>
+            <Link
+              href="/guidance/conferences"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2"
+            >
+              View calendar
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+
+          {todayConferences.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-1.5 py-10 text-center">
+                <CalendarClock className="size-7 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No conferences today.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <ul className="space-y-3">
+              {todayConferences.map((c) => (
                 <li key={c.id}>
                   <Card>
-                    <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
-                      <div className="flex items-center gap-4">
-                        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <CalendarClock className="size-5" />
-                        </span>
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            {c.time} · {c.id}
-                          </p>
-                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                            <span className="inline-flex items-center gap-1">
-                              <User className="size-3.5" />
+                    <CardContent className="flex flex-wrap items-center gap-4 py-4">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <CalendarClock className="size-5" />
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">{c.time}</p>
+                          {studentLink(c.student) && (
+                            <Link
+                              href={studentLink(c.student)}
+                              className="text-sm font-semibold text-primary hover:underline underline-offset-2"
+                            >
                               {c.student}
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Users className="size-3.5" />
-                              {c.parent}
-                            </span>
-                          </div>
+                            </Link>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="size-3.5" />
+                            {c.parent}
+                          </span>
                         </div>
                       </div>
                       <StatusBadge value={c.status} />
@@ -255,26 +260,8 @@ export default function GuidanceDashboardPage() {
               ))}
             </ul>
           )}
-        </div>
+        </section>
       </div>
-
-      {/* Full list */}
-      <section className="space-y-3">
-        <h2 className="font-heading text-base font-semibold text-foreground">
-          All conferences
-        </h2>
-        <DataTable
-          columns={[
-            { key: "id", label: "Ref" },
-            { key: "date", label: "Date" },
-            { key: "time", label: "Time" },
-            { key: "student", label: "Student" },
-            { key: "parent", label: "Parent/Guardian" },
-            { key: "status", label: "Status", badge: true },
-          ]}
-          rows={conferences}
-        />
-      </section>
 
       {/* Schedule modal */}
       <Modal
@@ -285,9 +272,8 @@ export default function GuidanceDashboardPage() {
         {scheduling && (
           <ScheduleForm
             referral={scheduling}
-            onDone={(date) => {
+            onDone={() => {
               setScheduling(null);
-              setSelected(date);
               toast.success("Conference scheduled.");
             }}
             onCancel={() => setScheduling(null)}
@@ -301,8 +287,6 @@ export default function GuidanceDashboardPage() {
 function ScheduleForm({ referral, onDone, onCancel }) {
   const today = toISODate(new Date());
 
-  // AI-prescribed slots stored on the referral (drop any now-past ones; fall
-  // back to a fresh suggestion for older referrals that have none).
   const slots = useMemo(() => {
     const stored = (referral.suggestedSlots ?? []).filter((s) => s.date >= today);
     return stored.length ? stored : suggestConferenceSlots();
@@ -317,15 +301,11 @@ function ScheduleForm({ referral, onDone, onCancel }) {
 
   const submit = (e) => {
     e.preventDefault();
-    let chosen;
-    if (custom) {
-      chosen = { date, time };
-    } else {
-      const [d, t] = picked.split("T");
-      chosen = { date: d, time: t };
-    }
+    const chosen = custom
+      ? { date, time }
+      : { date: picked.split("T")[0], time: picked.split("T")[1] };
     scheduleReferral(referral.id, chosen);
-    onDone(chosen.date);
+    onDone();
   };
 
   return (
@@ -336,17 +316,10 @@ function ScheduleForm({ referral, onDone, onCancel }) {
         {referral.guardian ? ` (${referral.guardian})` : ""}.
       </p>
 
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-primary" />
-          <p className="text-sm font-medium text-foreground">AI-suggested times</p>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-            AI preview
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Pick the slot that fits your availability.
-        </p>
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-4 text-primary" />
+        <p className="text-sm font-medium text-foreground">AI-suggested times</p>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">AI preview</span>
       </div>
 
       {!custom ? (
@@ -361,14 +334,10 @@ function ScheduleForm({ referral, onDone, onCancel }) {
                 onClick={() => setPicked(value)}
                 className={cn(
                   "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                  active
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-input hover:bg-slate-50"
+                  active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-input hover:bg-slate-50"
                 )}
               >
-                <span className="text-sm font-medium text-foreground">
-                  {fmtDate(s.date)}
-                </span>
+                <span className="text-sm font-medium text-foreground">{fmtDate(s.date)}</span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="size-3.5" />
                   {fmtTime(s.time)}
@@ -381,23 +350,11 @@ function ScheduleForm({ referral, onDone, onCancel }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="sch-date">Date</Label>
-            <Input
-              id="sch-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-11"
-            />
+            <Input id="sch-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sch-time">Time</Label>
-            <Input
-              id="sch-time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="h-11"
-            />
+            <Input id="sch-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11" />
           </div>
         </div>
       )}
@@ -407,15 +364,11 @@ function ScheduleForm({ referral, onDone, onCancel }) {
         onClick={() => setCustom((v) => !v)}
         className="text-xs font-medium text-primary hover:underline"
       >
-        {custom
-          ? "← Back to AI-suggested times"
-          : "None of these fit? Pick a custom time"}
+        {custom ? "← Back to AI-suggested times" : "None of these fit? Pick a custom time"}
       </button>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={!custom && !picked}>
           <CalendarPlus className="size-4" />
           Confirm schedule

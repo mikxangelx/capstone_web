@@ -4,13 +4,11 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { useAuth } from "@/components/auth-provider";
-import { StudentDetail } from "@/components/dashboard/student-detail";
+import { GuidanceStudentProfile } from "@/components/dashboard/guidance-student-profile";
 import { getUsers, getServerUsers, subscribe } from "@/lib/users";
 
 export default function GuidanceStudentDetailPage() {
   const { id } = useParams();
-  const { user } = useAuth();
   const users = useSyncExternalStore(subscribe, getUsers, getServerUsers);
   const student = users.find((u) => u.id === id) ?? null;
 
@@ -29,12 +27,5 @@ export default function GuidanceStudentDetailPage() {
     );
   }
 
-  return (
-    <StudentDetail
-      student={student}
-      user={user}
-      mode="guidance"
-      backHref="/guidance/students"
-    />
-  );
+  return <GuidanceStudentProfile student={student} />;
 }

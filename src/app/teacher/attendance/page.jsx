@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useSyncExternalStore } from "react";
+import { FileSpreadsheet, FileText, ChevronLeft, ChevronRight, ClipboardList, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, DataTable } from "@/components/dashboard/dashboard-ui";
 import { Calendar } from "@/components/dashboard/calendar";
@@ -13,8 +13,16 @@ import {
   getAttendanceForDate,
   getAttendanceForMonth,
   summarize,
+  STUDENT_ROSTER,
 } from "@/lib/mock-data";
 import { exportToExcel, exportToPdf } from "@/lib/export";
+import {
+  getOverrides,
+  getServerOverrides,
+  applyOverrides,
+  setBulkOverrides,
+  subscribe as subscribeOverrides,
+} from "@/lib/attendance-overrides";
 
 const EXPORT_COLUMNS = [
   { key: "date", label: "Date" },
@@ -41,9 +49,23 @@ const SUMMARY_CHIPS = [
   { key: "excused", label: "Excused", className: "bg-sky-100 text-sky-700" },
 ];
 
+const STATUS_OPTIONS = ["Present", "Late", "Absent", "Excused"];
+const STATUS_TONE = {
+  Present: "border-emerald-300 bg-emerald-50 text-emerald-700 ring-emerald-300",
+  Late:    "border-amber-300 bg-amber-50 text-amber-700 ring-amber-300",
+  Absent:  "border-red-300 bg-red-50 text-red-700 ring-red-300",
+  Excused: "border-sky-300 bg-sky-50 text-sky-700 ring-sky-300",
+};
+
 export default function AttendanceRecordPage() {
   const [selected, setSelected] = useState(() => toISODate(new Date()));
   const [period, setPeriod] = useState("daily");
+  const [activeFilter, setActiveFilter] = useState(null);
+  const [taking, setTaking] = useState(false);
+  // Local draft for the bulk take-attendance panel: { [name]: status }
+  const [draft, setDraft] = useState({});
+
+  const overrides = useSyncExternalStore(subscribeOverrides, getOverrides, getServerOverrides);
 
   const isMonthly = period === "monthly";
 
@@ -51,10 +73,17 @@ export default function AttendanceRecordPage() {
   const year = d.getFullYear();
   const monthIndex = d.getMonth();
 
-  const records = isMonthly
+  const rawRecords = isMonthly
     ? getAttendanceForMonth(year, monthIndex)
     : getAttendanceForDate(selected);
-  const summary = summarize(records);
+  const allRecords = applyOverrides(overrides, rawRecords);
+  const summary = summarize(allRecords);
+  const records = activeFilter
+    ? allRecords.filter((r) => r.status?.toLowerCase() === activeFilter)
+    : allRecords;
+
+  const handleChipClick = (key) =>
+    setActiveFilter((prev) => (prev === key ? null : key));
 
   const dayLabel = d.toLocaleDateString(undefined, {
     weekday: "long",
@@ -65,8 +94,10 @@ export default function AttendanceRecordPage() {
   const monthLabel = d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const recordsLabel = isMonthly ? monthLabel : dayLabel;
 
-  // Move to a different month/year (keeps the day at the 1st).
-  const goToMonth = (m, y = year) => setSelected(toISODate(new Date(y, m, 1)));
+  const goToMonth = (m, y = year) => {
+    setActiveFilter(null);
+    setSelected(toISODate(new Date(y, m, 1)));
+  };
 
   const handleExport = (kind) => {
     if (records.length === 0) {
@@ -85,6 +116,30 @@ export default function AttendanceRecordPage() {
       exportToPdf(title, EXPORT_COLUMNS, records);
       toast.success("Opening printable PDF…");
     }
+  };
+
+  // Open bulk panel — seed draft from current records so existing marks show.
+  const openTakeAttendance = () => {
+    const seed = {};
+    for (const s of STUDENT_ROSTER) {
+      const existing = overrides[`${s.name}::${selected}`];
+      if (existing) { seed[s.name] = existing; continue; }
+      const row = rawRecords.find((r) => r.student === s.name);
+      seed[s.name] = row?.status ?? "Present";
+    }
+    setDraft(seed);
+    setTaking(true);
+  };
+
+  const saveBulk = () => {
+    const entries = STUDENT_ROSTER.map((s) => ({
+      name: s.name,
+      dateStr: selected,
+      status: draft[s.name] ?? "Present",
+    }));
+    setBulkOverrides(entries);
+    setTaking(false);
+    toast.success(`Attendance saved for ${dayLabel}.`);
   };
 
   const tableColumns = isMonthly
@@ -109,7 +164,7 @@ export default function AttendanceRecordPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-        {/* Picker: calendar (daily) or month grid (monthly) */}
+        {/* Picker */}
         <Card className="h-fit">
           <CardHeader>
             <h2 className="font-heading text-base font-semibold text-foreground">
@@ -124,7 +179,6 @@ export default function AttendanceRecordPage() {
           <CardContent>
             {isMonthly ? (
               <div className="space-y-3">
-                {/* Year navigation */}
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
@@ -144,7 +198,6 @@ export default function AttendanceRecordPage() {
                     <ChevronRight className="size-5" />
                   </button>
                 </div>
-                {/* Month grid */}
                 <div className="grid grid-cols-3 gap-2">
                   {MONTHS.map((m, i) => (
                     <button
@@ -164,14 +217,14 @@ export default function AttendanceRecordPage() {
                 </div>
               </div>
             ) : (
-              <Calendar selected={selected} onSelect={setSelected} />
+              <Calendar selected={selected} onSelect={(v) => { setSelected(v); setTaking(false); }} />
             )}
           </CardContent>
         </Card>
 
         {/* Records + export */}
         <div className="space-y-5">
-          {/* Export bar */}
+          {/* Control bar */}
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
               <div className="flex items-center gap-3">
@@ -181,7 +234,7 @@ export default function AttendanceRecordPage() {
                     <button
                       key={p.key}
                       type="button"
-                      onClick={() => setPeriod(p.key)}
+                      onClick={() => { setPeriod(p.key); setActiveFilter(null); setTaking(false); }}
                       className={cn(
                         "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                         period === p.key
@@ -195,6 +248,16 @@ export default function AttendanceRecordPage() {
                 </div>
               </div>
               <div className="flex gap-2">
+                {!isMonthly && (
+                  <Button
+                    variant={taking ? "outline" : "secondary"}
+                    size="sm"
+                    onClick={() => taking ? setTaking(false) : openTakeAttendance()}
+                  >
+                    {taking ? <X className="size-4" /> : <ClipboardList className="size-4" />}
+                    {taking ? "Cancel" : "Take Attendance"}
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={() => handleExport("excel")}>
                   <FileSpreadsheet className="size-4" />
                   Excel
@@ -207,24 +270,81 @@ export default function AttendanceRecordPage() {
             </CardContent>
           </Card>
 
+          {/* Bulk take-attendance panel */}
+          {taking && !isMonthly && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-heading text-base font-semibold text-foreground">
+                      Take Attendance
+                    </h2>
+                    <p className="text-sm text-muted-foreground">{dayLabel}</p>
+                  </div>
+                  <Button size="sm" onClick={saveBulk}>
+                    Save
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y divide-slate-100">
+                  {STUDENT_ROSTER.map((s) => (
+                    <li key={s.name} className="flex flex-wrap items-center gap-3 py-3">
+                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                        {s.name}
+                      </span>
+                      <div className="flex gap-1.5">
+                        {STATUS_OPTIONS.map((st) => {
+                          const active = draft[s.name] === st;
+                          return (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => setDraft((prev) => ({ ...prev, [s.name]: st }))}
+                              className={cn(
+                                "rounded-lg border px-2.5 py-1 text-xs font-medium transition-all",
+                                active
+                                  ? `${STATUS_TONE[st]} ring-2`
+                                  : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                              )}
+                            >
+                              {st}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Summary + table */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-heading text-base font-semibold text-foreground">
                 {recordsLabel}
               </h2>
-              {records.length > 0 && (
+              {allRecords.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {SUMMARY_CHIPS.map((c) => (
-                    <span
+                    <button
                       key={c.key}
+                      type="button"
+                      onClick={() => handleChipClick(c.key)}
                       className={cn(
-                        "rounded-full px-2.5 py-0.5 text-xs font-medium",
-                        c.className
+                        "rounded-full px-2.5 py-0.5 text-xs font-medium transition-all",
+                        c.className,
+                        activeFilter === c.key
+                          ? "ring-2 ring-offset-1 ring-current opacity-100"
+                          : activeFilter
+                          ? "opacity-50 hover:opacity-80"
+                          : "hover:opacity-80"
                       )}
                     >
                       {c.label}: {summary[c.key]}
-                    </span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -234,7 +354,9 @@ export default function AttendanceRecordPage() {
               columns={tableColumns}
               rows={records}
               empty={
-                isMonthly
+                activeFilter
+                  ? `No ${activeFilter} records for this period.`
+                  : isMonthly
                   ? "No records for this month."
                   : "No classes on this day (weekend) or no records found."
               }

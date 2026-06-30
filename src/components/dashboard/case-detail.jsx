@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -23,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/dashboard/dashboard-ui";
+import { cn } from "@/lib/utils";
 import {
   getReferrals,
   getServerReferrals,
@@ -44,6 +45,8 @@ export function CaseDetail({ caseData, user, backHref, backLabel = "Back to Case
   const [notes, setNotes] = useState([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [confOpen, setConfOpen] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState(null);
+  const historyRef = useRef(null);
 
   // Live referral status for this case (so the teacher sees when guidance schedules).
   const referrals = useSyncExternalStore(subscribe, getReferrals, getServerReferrals);
@@ -83,10 +86,14 @@ export function CaseDetail({ caseData, user, backHref, backLabel = "Back to Case
   };
 
   const stats = [
-    { icon: UserCheck, label: "Attendance", value: `${caseData.attendanceRate}%`, tone: "bg-emerald-100 text-emerald-700" },
-    { icon: UserX, label: "Absences", value: caseData.absences, tone: "bg-red-100 text-red-700" },
-    { icon: Clock, label: "Late arrivals", value: caseData.lates, tone: "bg-amber-100 text-amber-700" },
+    { icon: UserCheck, label: "Attendance", value: `${caseData.attendanceRate}%`, tone: "bg-emerald-100 text-emerald-700", filterKey: null },
+    { icon: UserX, label: "Absences", value: caseData.absences, tone: "bg-red-100 text-red-700", filterKey: "Absent" },
+    { icon: Clock, label: "Late arrivals", value: caseData.lates, tone: "bg-amber-100 text-amber-700", filterKey: "Late" },
   ];
+
+  const filteredHistory = historyFilter
+    ? caseData.history.filter((h) => h.status === historyFilter)
+    : caseData.history;
 
   return (
     <>
@@ -140,20 +147,40 @@ export function CaseDetail({ caseData, user, backHref, backLabel = "Back to Case
             <CardContent className="space-y-4">
               <p className="text-sm text-foreground/90">{caseData.reason}</p>
               <div className="grid grid-cols-3 gap-3">
-                {stats.map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-xl bg-slate-50 p-3 text-center ring-1 ring-black/5"
-                  >
-                    <span
-                      className={`mx-auto mb-1.5 flex size-8 items-center justify-center rounded-lg ${s.tone}`}
+                {stats.map((s) => {
+                  const isActive = historyFilter === s.filterKey;
+                  const isClickable = s.filterKey !== null;
+                  const Wrapper = isClickable ? "button" : "div";
+                  return (
+                    <Wrapper
+                      key={s.label}
+                      {...(isClickable
+                        ? {
+                            type: "button",
+                            onClick: () => {
+                              setHistoryFilter((prev) =>
+                                prev === s.filterKey ? null : s.filterKey
+                              );
+                              historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            },
+                          }
+                        : {})}
+                      className={cn(
+                        "rounded-xl bg-slate-50 p-3 text-center ring-1 ring-black/5 transition-all",
+                        isClickable && "cursor-pointer hover:bg-slate-100",
+                        isActive && "ring-2 ring-primary/50 bg-primary/5"
+                      )}
                     >
-                      <s.icon className="size-4" />
-                    </span>
-                    <p className="text-lg font-bold text-foreground">{s.value}</p>
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                  </div>
-                ))}
+                      <span
+                        className={`mx-auto mb-1.5 flex size-8 items-center justify-center rounded-lg ${s.tone}`}
+                      >
+                        <s.icon className="size-4" />
+                      </span>
+                      <p className="text-lg font-bold text-foreground">{s.value}</p>
+                      <p className="text-xs text-muted-foreground">{s.label}</p>
+                    </Wrapper>
+                  );
+                })}
               </div>
               <p className="text-xs text-muted-foreground">
                 Based on {caseData.period.toLowerCase()}.
@@ -224,26 +251,48 @@ export function CaseDetail({ caseData, user, backHref, backLabel = "Back to Case
           </Card>
 
           {/* Attendance history */}
-          <Card>
+          <div ref={historyRef}><Card>
             <CardHeader>
-              <h2 className="font-heading text-base font-semibold text-foreground">
-                Recent attendance history
-              </h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-heading text-base font-semibold text-foreground">
+                  Recent attendance history
+                  {historyFilter && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      — {historyFilter} only
+                    </span>
+                  )}
+                </h2>
+                {historyFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter(null)}
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                  >
+                    Show all
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <ul className="divide-y divide-slate-100">
-                {caseData.history.map((h, i) => (
-                  <li key={i} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="flex items-center gap-3">
-                      <StatusBadge value={h.status} />
-                      <span className="text-sm text-foreground/90">{h.note}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{h.date}</span>
+                {filteredHistory.length > 0 ? (
+                  filteredHistory.map((h, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="flex items-center gap-3">
+                        <StatusBadge value={h.status} />
+                        <span className="text-sm text-foreground/90">{h.note}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{h.date}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="py-4 text-center text-sm text-muted-foreground">
+                    No {historyFilter?.toLowerCase()} records found.
                   </li>
-                ))}
+                )}
               </ul>
             </CardContent>
-          </Card>
+          </Card></div>
 
           {/* Case notes */}
           <Card>

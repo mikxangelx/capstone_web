@@ -28,13 +28,25 @@ import {
   prescriptiveFor,
   recommendedAction,
 } from "@/lib/students";
-import { getAttendanceForStudentInMonth, summarize } from "@/lib/mock-data";
+import { getAttendanceForStudentInMonth, summarize, toISODate, CASES, CONFERENCES } from "@/lib/mock-data";
 import {
   getReferrals,
   getServerReferrals,
-  subscribe,
+  subscribe as subscribeReferrals,
   addReferral,
 } from "@/lib/referrals";
+import {
+  getOverrides,
+  getServerOverrides,
+  setOverride,
+  applyOverrides,
+  subscribe as subscribeOverrides,
+} from "@/lib/attendance-overrides";
+import {
+  getConferenceOutcomes,
+  getServerConferenceOutcomes,
+  subscribe as subscribeConferenceOutcomes,
+} from "@/lib/conference-outcomes";
 
 function fmtTime(t) {
   if (!t) return "";
@@ -53,7 +65,12 @@ export function StudentDetail({ student, user, mode, backHref }) {
   const [confOpen, setConfOpen] = useState(false);
   const [period, setPeriod] = useState("recent");
 
-  const referrals = useSyncExternalStore(subscribe, getReferrals, getServerReferrals);
+  const referrals = useSyncExternalStore(subscribeReferrals, getReferrals, getServerReferrals);
+  const overrides = useSyncExternalStore(subscribeOverrides, getOverrides, getServerOverrides);
+  const conferenceOutcomes = useSyncExternalStore(subscribeConferenceOutcomes, getConferenceOutcomes, getServerConferenceOutcomes);
+
+  const today = toISODate(new Date());
+  const todayOverride = overrides[`${student.name}::${today}`] ?? null;
   const referral =
     referrals.find(
       (r) => r.studentId === student.id || r.student === student.name
@@ -97,6 +114,8 @@ export function StudentDetail({ student, user, mode, backHref }) {
     period === "recent"
       ? `Last ${periodRecord.total} school days`
       : monthOptions.find((o) => o.value === period)?.label ?? "";
+
+  const displayHistory = applyOverrides(overrides, periodRecord.history);
 
   const initials = student.name
     .split(" ")
@@ -253,6 +272,15 @@ export function StudentDetail({ student, user, mode, backHref }) {
             </Card>
           )}
 
+          {/* Concern history timeline — guidance only */}
+          {mode === "guidance" && (
+            <ConcernTimeline
+              studentName={student.name}
+              referrals={referrals}
+              conferenceOutcomes={conferenceOutcomes}
+            />
+          )}
+
           {/* Attendance record */}
           <Card>
             <CardHeader>
@@ -300,7 +328,7 @@ export function StudentDetail({ student, user, mode, backHref }) {
                   { key: "timeIn", label: "Time In" },
                   { key: "status", label: "Status", badge: true },
                 ]}
-                rows={periodRecord.history}
+                rows={displayHistory}
                 empty="No attendance records."
               />
             </CardContent>
@@ -309,6 +337,57 @@ export function StudentDetail({ student, user, mode, backHref }) {
 
         {/* Side column */}
         <div className="space-y-6">
+          {/* Mark today — teacher only */}
+          {mode === "teacher" && (
+            <Card>
+              <CardHeader>
+                <h2 className="font-heading text-base font-semibold text-foreground">
+                  Mark today
+                </h2>
+                <p className="text-sm text-muted-foreground">{today}</p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {["Present", "Late", "Absent", "Excused"].map((s) => {
+                    const active = todayOverride === s;
+                    const toneClass =
+                      s === "Present" ? "border-emerald-300 bg-emerald-50 text-emerald-700 ring-emerald-300" :
+                      s === "Late"    ? "border-amber-300 bg-amber-50 text-amber-700 ring-amber-300" :
+                      s === "Absent"  ? "border-red-300 bg-red-50 text-red-700 ring-red-300" :
+                                        "border-sky-300 bg-sky-50 text-sky-700 ring-sky-300";
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          setOverride(student.name, today, s);
+                          toast.success(`Marked ${student.name.split(" ")[0]} as ${s}.`);
+                        }}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                          active ? `${toneClass} ring-2` : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+                {todayOverride && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOverride(student.name, today, null);
+                      toast.success("Mark cleared.");
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                  >
+                    Clear mark
+                  </button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Recommended action */}
           <Card>
             <CardHeader>
@@ -422,6 +501,81 @@ function ReferralStatus({ referral }) {
       <CircleCheck className="size-4" />
       Forwarded — awaiting guidance
     </span>
+  );
+}
+
+function ConcernTimeline({ studentName, referrals, conferenceOutcomes }) {
+  const caseItems = CASES
+    .filter((c) => c.student === studentName)
+    .map((c) => ({
+      date: c.updated,
+      label: `Case ${c.id} — ${c.type}`,
+      meta: `${c.priority} priority · ${c.status}`,
+      tone: c.status === "Resolved" ? "text-emerald-600" : c.priority === "High" ? "text-red-600" : "text-amber-600",
+      dot: c.status === "Resolved" ? "bg-emerald-400" : c.priority === "High" ? "bg-red-500" : "bg-amber-400",
+    }));
+
+  const confItems = CONFERENCES
+    .filter((c) => c.student === studentName)
+    .map((c) => ({
+      date: c.date,
+      label: `Conference ${c.id}`,
+      meta: `${c.time} · ${c.parent} · ${c.status}`,
+      tone: "text-sky-600",
+      dot: "bg-sky-400",
+      outcomeNote: conferenceOutcomes?.[c.id]?.note ?? null,
+    }));
+
+  const refItems = referrals
+    .filter((r) => r.student === studentName)
+    .map((r) => ({
+      date: r.date ?? new Date(r.createdAt).toISOString().slice(0, 10),
+      label: `Referral by ${r.fromName}`,
+      meta: r.status,
+      tone: "text-primary",
+      dot: "bg-primary",
+    }));
+
+  const all = [...caseItems, ...confItems, ...refItems].sort(
+    (a, b) => (b.date ?? "").localeCompare(a.date ?? "")
+  );
+
+  if (all.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="font-heading text-base font-semibold text-foreground">
+          Concern history
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Cases, conferences, and referrals for this student.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="relative space-y-0 pl-4">
+          {/* Vertical line */}
+          <span className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" aria-hidden />
+          {all.map((item, i) => (
+            <li key={i} className="relative flex gap-3 pb-4 last:pb-0">
+              <span className={`mt-1 size-3 shrink-0 rounded-full ring-2 ring-white ${item.dot}`} />
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-medium ${item.tone}`}>{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.meta}</p>
+                {item.date && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">{item.date}</p>
+                )}
+                {item.outcomeNote && (
+                  <p className="mt-1 rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">
+                    Outcome: {item.outcomeNote}
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
